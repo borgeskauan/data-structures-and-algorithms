@@ -98,18 +98,45 @@ public class LinearProbingHashMap implements ExerciseHashMap {
         }
 
         mainArray[index] = null;
+        size--;
 
-        while (index < mainArray.length - 1) {
-            mainArray[index] = mainArray[index + 1];
+        int nextEmptyIndex = index + 1;
 
-            if (mainArray[index] == null) {
+        while (index < mainArray.length) {
+            if (mainArray[nextEmptyIndex] == null) {
                 break;
             }
 
-            index++;
+            nextEmptyIndex++;
         }
 
-        size--;
+        var tempArray = new Entry[nextEmptyIndex - index];
+        int tempArrayIndex = 0;
+
+        nextEmptyIndex = index + 1;
+        while (index < mainArray.length) {
+            if (mainArray[nextEmptyIndex] == null) {
+                break;
+            }
+
+            tempArray[tempArrayIndex] = mainArray[nextEmptyIndex];
+            mainArray[nextEmptyIndex] = null;
+            nextEmptyIndex++;
+            tempArrayIndex++;
+        }
+
+        int originalSize = size;
+
+        for (var entry : tempArray) {
+            if (entry == null) {
+                continue;
+            }
+
+            put(entry.key, entry.value);
+        }
+
+        size = originalSize;
+
         return true;
     }
 
