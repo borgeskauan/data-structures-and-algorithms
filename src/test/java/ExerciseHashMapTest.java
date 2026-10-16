@@ -7,6 +7,7 @@ import java.time.Duration;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.OptionalInt;
+import java.util.Random;
 
 import org.junit.jupiter.api.Test;
 
@@ -14,61 +15,44 @@ import org.junit.jupiter.api.Test;
 class ExerciseHashMapTest {
 
     @Test
-    void insertsOneKeyAndRetrievesItsValue() {
+    void insertsAndUpdatesAKeyWithoutIncreasingSize() {
         ExerciseHashMap map = new LinearProbingHashMap();
 
         map.put(42, 7);
-
         assertEquals(OptionalInt.of(7), map.get(42));
         assertTrue(map.containsKey(42));
         assertEquals(1, map.size());
-    }
 
-    @Test
-    void returnsEmptyForANonexistentKey() {
-        ExerciseHashMap map = new LinearProbingHashMap();
-
-        assertEquals(OptionalInt.empty(), map.get(999));
-        assertFalse(map.containsKey(999));
-        assertEquals(0, map.size());
-    }
-
-    @Test
-    void updatingAnExistingKeyReplacesItsValueWithoutChangingSize() {
-        ExerciseHashMap map = new LinearProbingHashMap();
-        map.put(42, 41);
-
-        map.put(42, 7);
-
-        assertEquals(OptionalInt.of(7), map.get(42));
+        map.put(42, -9);
+        assertEquals(OptionalInt.of(-9), map.get(42));
         assertEquals(1, map.size());
     }
 
     @Test
-    void removesAnExistingKey() {
+    void unsuccessfulLookupAndRemovalLeaveTheMapUnchanged() {
+        ExerciseHashMap map = new LinearProbingHashMap();
+        map.put(5, 70);
+
+        assertEquals(OptionalInt.empty(), map.get(999));
+        assertFalse(map.containsKey(999));
+        assertFalse(map.remove(999));
+        assertEquals(1, map.size());
+        assertEquals(OptionalInt.of(70), map.get(5));
+    }
+
+    @Test
+    void removingAnExistingKeyReturnsTrueAndDecreasesSize() {
         ExerciseHashMap map = new LinearProbingHashMap();
         map.put(42, 7);
 
         assertTrue(map.remove(42));
-
         assertEquals(OptionalInt.empty(), map.get(42));
         assertFalse(map.containsKey(42));
         assertEquals(0, map.size());
     }
 
     @Test
-    void removingANonexistentKeyReturnsFalseAndLeavesMapUnchanged() {
-        ExerciseHashMap map = new LinearProbingHashMap();
-        map.put(5, 70);
-
-        assertFalse(map.remove(999));
-
-        assertEquals(1, map.size());
-        assertEquals(OptionalInt.of(70), map.get(5));
-    }
-
-    @Test
-    void retrievesKeysThatCollideInTheInitialTable() {
+    void resolvesCollisionsForKeysWithTheSameNaturalIndex() {
         ExerciseHashMap map = new LinearProbingHashMap();
         int[] keys = {1, 101, 201};
         int[] values = {10, 20, 30};
@@ -77,45 +61,29 @@ class ExerciseHashMapTest {
             map.put(keys[index], values[index]);
         }
 
+        assertEquals(3, map.size());
         for (int index = 0; index < keys.length; index++) {
             assertEquals(OptionalInt.of(values[index]), map.get(keys[index]));
         }
-        assertEquals(keys.length, map.size());
     }
 
     @Test
-    void deletingFromTheMiddleOfACollisionChainKeepsOtherEntriesReachable() {
+    void deletingFromTheMiddleOfACollisionChainPreservesFollowingEntries() {
         ExerciseHashMap map = new LinearProbingHashMap();
-        int first = 1;
-        int middle = 101;
-        int last = 201;
-        map.put(first, 10);
-        map.put(middle, 20);
-        map.put(last, 30);
+        map.put(1, 10);
+        map.put(101, 20);
+        map.put(201, 30);
 
-        assertTrue(map.remove(middle));
+        assertTrue(map.remove(101));
 
-        assertEquals(OptionalInt.of(10), map.get(first));
-        assertEquals(OptionalInt.empty(), map.get(middle));
-        assertEquals(OptionalInt.of(30), map.get(last));
+        assertEquals(OptionalInt.of(10), map.get(1));
+        assertEquals(OptionalInt.empty(), map.get(101));
+        assertEquals(OptionalInt.of(30), map.get(201));
         assertEquals(2, map.size());
     }
 
     @Test
-    void collisionsFromDifferentNaturalIndicesRemainSearchable() {
-        ExerciseHashMap map = new LinearProbingHashMap();
-        map.put(1, 11);
-        map.put(2, 22);
-        map.put(101, 1_011);
-
-        assertEquals(OptionalInt.of(11), map.get(1));
-        assertEquals(OptionalInt.of(22), map.get(2));
-        assertEquals(OptionalInt.of(1_011), map.get(101));
-        assertEquals(3, map.size());
-    }
-
-    @Test
-    void deletingAnEarlierEntryDoesNotShiftAnotherKeyBeforeItsNaturalIndex() {
+    void deletionDoesNotMoveAKeyBeforeItsNaturalIndex() {
         ExerciseHashMap map = new LinearProbingHashMap();
         map.put(1, 11);   // natural index 1
         map.put(2, 22);   // natural index 2
@@ -123,96 +91,47 @@ class ExerciseHashMapTest {
 
         assertTrue(map.remove(1));
 
+        assertEquals(OptionalInt.empty(), map.get(1));
         assertEquals(OptionalInt.of(22), map.get(2));
         assertEquals(OptionalInt.of(1_011), map.get(101));
         assertEquals(2, map.size());
     }
 
     @Test
-    void insertionAfterDeletionKeepsTheRemainingAndNewEntriesAccessible() {
+    void wrappedChainDeletionsAndReinsertionsPreserveAllEntriesAndValues() {
         ExerciseHashMap map = new LinearProbingHashMap();
-        map.put(1, 10);
-        map.put(101, 20);
-        map.put(201, 30);
+        int entryCount = 45;
+        int[] candidateKeys = new int[entryCount + 3];
+        Map<Integer, Integer> expected = new HashMap<>();
 
-        assertTrue(map.remove(101));
-        map.put(301, 40);
-
-        assertEquals(OptionalInt.of(10), map.get(1));
-        assertEquals(OptionalInt.empty(), map.get(101));
-        assertEquals(OptionalInt.of(30), map.get(201));
-        assertEquals(OptionalInt.of(40), map.get(301));
-        assertEquals(3, map.size());
-    }
-
-    @Test
-    void repeatedDeletionAndReinsertionKeepsCollisionChainEntriesCorrect() {
-        ExerciseHashMap map = new LinearProbingHashMap();
-        int[] keys = {1, 101, 201, 301};
-        int[] values = {10, 20, 30, 40};
-        for (int index = 0; index < keys.length; index++) {
-            map.put(keys[index], values[index]);
+        for (int index = 0; index < entryCount; index++) {
+            int key = 99 + index * 100;
+            int value = 30_000 + index;
+            candidateKeys[index] = key;
+            map.put(key, value);
+            expected.put(key, value);
         }
 
-        for (int round = 0; round < 8; round++) {
-            int replaceIndex = (round + 1) % keys.length;
-            int removed = keys[replaceIndex];
-            assertTrue(map.remove(removed));
-            assertFalse(map.containsKey(removed));
-            assertEquals(OptionalInt.empty(), map.get(removed));
+        // This chain runs through slot 99 and wraps to slot 0. The first
+        // deletion is near its end, with another occupied entry following it.
+        int[] removedIndices = {43, 20, 7};
+        for (int round = 0; round < removedIndices.length; round++) {
+            int removedKey = candidateKeys[removedIndices[round]];
+            assertTrue(map.remove(removedKey));
+            expected.remove(removedKey);
 
-            int replacement = (round + 10) * 100 + 1;
-            int replacementValue = 100 + round;
-            map.put(replacement, replacementValue);
-            keys[replaceIndex] = replacement;
-            values[replaceIndex] = replacementValue;
+            int replacementKey = 99 + (entryCount + round) * 100;
+            int replacementValue = -40_000 - round;
+            candidateKeys[entryCount + round] = replacementKey;
+            map.put(replacementKey, replacementValue);
+            expected.put(replacementKey, replacementValue);
 
-            assertEquals(keys.length, map.size());
-            for (int index = 0; index < keys.length; index++) {
-                assertTrue(map.containsKey(keys[index]));
-                assertEquals(OptionalInt.of(values[index]), map.get(keys[index]));
-            }
+            assertMatchesReference(map, expected, candidateKeys);
         }
     }
 
     @Test
-    void entriesRemainAvailableAfterInsertingManyKeys() {
-        ExerciseHashMap map = new LinearProbingHashMap();
-        int entryCount = 10_000;
-
-        for (int key = 0; key < entryCount; key++) {
-            map.put(key, key * 3);
-        }
-
-        assertEquals(entryCount, map.size());
-        for (int key = 0; key < entryCount; key++) {
-            assertEquals(OptionalInt.of(key * 3), map.get(key));
-        }
-    }
-
-    @Test
-    void crossingTheInitialLoadThresholdPreservesAllEntries() {
-        ExerciseHashMap map = new LinearProbingHashMap();
-
-        for (int key = 0; key < 50; key++) {
-            map.put(key, key + 100);
-        }
-
-        assertEquals(50, map.size());
-        for (int key = 0; key < 50; key++) {
-            assertEquals(OptionalInt.of(key + 100), map.get(key));
-        }
-
-        map.put(50, 150);
-
-        assertEquals(51, map.size());
-        for (int key = 0; key <= 50; key++) {
-            assertEquals(OptionalInt.of(key + 100), map.get(key));
-        }
-    }
-
-    @Test
-    void collidingEntriesRemainAvailableAfterGrowth() {
+    void growsAndRehashesCollidingEntriesThenMaintainsSizeAfterRemoval() {
         ExerciseHashMap map = new LinearProbingHashMap();
         int entryCount = 2_000;
         int[] keys = new int[entryCount];
@@ -224,85 +143,81 @@ class ExerciseHashMapTest {
 
         assertEquals(entryCount, map.size());
         for (int index = 0; index < entryCount; index++) {
-            assertTrue(map.containsKey(keys[index]));
             assertEquals(OptionalInt.of(index - 1_000), map.get(keys[index]));
         }
-    }
 
-    @Test
-    void handlesNegativeKeysIncludingIntegerMinimumValue() {
-        ExerciseHashMap map = new LinearProbingHashMap();
-
-        map.put(-37, Integer.MIN_VALUE);
-        map.put(Integer.MIN_VALUE, -1);
-
-        assertEquals(OptionalInt.of(Integer.MIN_VALUE), map.get(-37));
-        assertEquals(OptionalInt.of(-1), map.get(Integer.MIN_VALUE));
-        assertTrue(map.containsKey(Integer.MIN_VALUE));
-    }
-
-    @Test
-    void probesAcrossTheArrayBoundaryForKeysHashingToTheLastBucket() {
-        ExerciseHashMap map = new LinearProbingHashMap();
-        int[] keys = {99, 199, 299};
-
-        assertTimeoutPreemptively(Duration.ofSeconds(2), () -> {
-            for (int index = 0; index < keys.length; index++) {
-                map.put(keys[index], index + 1);
-            }
-
-            for (int index = 0; index < keys.length; index++) {
-                assertEquals(OptionalInt.of(index + 1), map.get(keys[index]));
-            }
-        });
-    }
-
-    @Test
-    void removingANonexistentKeyAtTheArrayBoundaryReturnsFalseWithoutChangingTheMap() {
-        ExerciseHashMap map = new LinearProbingHashMap();
-        map.put(99, 9_900);
-
-        assertTimeoutPreemptively(Duration.ofSeconds(2), () -> assertFalse(map.remove(199)));
-
-        assertEquals(1, map.size());
-        assertEquals(OptionalInt.of(9_900), map.get(99));
-    }
-
-    @Test
-    void unsuccessfulSearchesTerminateAfterHeavyCollisionsAndDeletions() {
-        ExerciseHashMap map = new LinearProbingHashMap();
-        int entryCount = 2_000;
-        int[] keys = new int[entryCount];
-        for (int index = 0; index < entryCount; index++) {
-            keys[index] = index * 100;
-            map.put(keys[index], index);
-        }
         for (int index = 0; index < entryCount; index += 2) {
             assertTrue(map.remove(keys[index]));
         }
-
-        int absent = entryCount * 100;
-        assertTimeoutPreemptively(Duration.ofSeconds(5), () -> {
-            assertEquals(OptionalInt.empty(), map.get(absent));
-            assertFalse(map.containsKey(absent));
-            assertFalse(map.remove(absent));
-        });
+        assertEquals(entryCount / 2, map.size());
+        for (int index = 0; index < entryCount; index++) {
+            if (index % 2 == 0) {
+                assertEquals(OptionalInt.empty(), map.get(keys[index]));
+            } else {
+                assertEquals(OptionalInt.of(index - 1_000), map.get(keys[index]));
+            }
+        }
+        assertFalse(map.remove(entryCount * 100));
+        assertEquals(entryCount / 2, map.size());
     }
 
     @Test
-    void repeatedInsertUpdateAndDeleteOperationsMatchAReferenceMap() {
+    void handlesNegativeKeysAndIntegerBoundaryKeysAndValues() {
+        ExerciseHashMap map = new LinearProbingHashMap();
+        int[] keys = {-37, Integer.MIN_VALUE, Integer.MAX_VALUE, 0};
+        int[] values = {Integer.MIN_VALUE, -1, 0, Integer.MAX_VALUE};
+
+        for (int index = 0; index < keys.length; index++) {
+            map.put(keys[index], values[index]);
+        }
+
+        assertEquals(keys.length, map.size());
+        for (int index = 0; index < keys.length; index++) {
+            assertEquals(OptionalInt.of(values[index]), map.get(keys[index]));
+            assertTrue(map.containsKey(keys[index]));
+        }
+        assertEquals(OptionalInt.empty(), map.get(99));
+    }
+
+    @Test
+    void wrapsAtTheArrayEndAndTerminatesAtTheLongestReachableInitialCluster() {
+        ExerciseHashMap map = new LinearProbingHashMap();
+        int entryCount = 50;
+        int[] keys = new int[entryCount];
+
+        // At capacity 100 these keys occupy slots 99, 0, ..., 48. The final
+        // key takes 50 probes. A full-table probe is unreachable via the API:
+        // inserting the 51st distinct key grows the table at load factor 0.5.
+        for (int index = 0; index < entryCount; index++) {
+            keys[index] = 99 + index * 100;
+            map.put(keys[index], index * 17 - 200);
+        }
+
+        int missingKey = 99 + entryCount * 100;
+        assertTimeoutPreemptively(Duration.ofSeconds(2), () -> {
+            assertEquals(OptionalInt.of((entryCount - 1) * 17 - 200), map.get(keys[entryCount - 1]));
+            assertTrue(map.containsKey(keys[entryCount - 1]));
+            assertEquals(OptionalInt.empty(), map.get(missingKey));
+            assertFalse(map.containsKey(missingKey));
+            assertFalse(map.remove(missingKey));
+        });
+        assertEquals(entryCount, map.size());
+    }
+
+    @Test
+    void deterministicOperationSequenceMatchesJavaHashMap() {
         ExerciseHashMap actual = new LinearProbingHashMap();
         Map<Integer, Integer> expected = new HashMap<>();
-        int[] keys = {1, 2, 101, 201, 301};
+        int[] keys = {1, 2, 99, 101, 199, 201, -1, Integer.MIN_VALUE, Integer.MAX_VALUE};
+        Random random = new Random(0x5EED);
 
-        for (int step = 0; step < 60; step++) {
-            int key = keys[(step * 3) % keys.length];
-            if (step % 4 == 3) {
-                boolean expectedRemoved = expected.containsKey(key);
-                assertEquals(expectedRemoved, actual.remove(key));
+        for (int step = 0; step < 300; step++) {
+            int key = keys[random.nextInt(keys.length)];
+            if (random.nextInt(4) == 0) {
+                assertEquals(expected.containsKey(key), actual.remove(key));
                 expected.remove(key);
             } else {
-                int value = step % 2 == 0 ? -step : step;
+                int value = random.nextInt();
                 actual.put(key, value);
                 expected.put(key, value);
             }
@@ -311,33 +226,16 @@ class ExerciseHashMapTest {
         }
     }
 
-    @Test
-    void optionalResultDistinguishesAbsenceFromEveryIntValue() {
-        ExerciseHashMap map = new LinearProbingHashMap();
-        int[] values = {Integer.MIN_VALUE, -1, 0, Integer.MAX_VALUE};
-
-        for (int index = 0; index < values.length; index++) {
-            map.put(index, values[index]);
-        }
-
-        for (int index = 0; index < values.length; index++) {
-            assertEquals(OptionalInt.of(values[index]), map.get(index));
-        }
-        assertEquals(OptionalInt.empty(), map.get(99));
-    }
-
     private static void assertMatchesReference(
             ExerciseHashMap actual,
             Map<Integer, Integer> expected,
-            int[] keys) {
+            int[] candidateKeys) {
         assertEquals(expected.size(), actual.size());
-        for (int key : keys) {
+        for (int key : candidateKeys) {
             assertEquals(expected.containsKey(key), actual.containsKey(key));
-            Integer expectedValue = expected.get(key);
-            OptionalInt expectedResult = expectedValue == null
-                    ? OptionalInt.empty()
-                    : OptionalInt.of(expectedValue);
-            assertEquals(expectedResult, actual.get(key));
+            Integer value = expected.get(key);
+            OptionalInt expectedValue = value == null ? OptionalInt.empty() : OptionalInt.of(value);
+            assertEquals(expectedValue, actual.get(key));
         }
     }
 }

@@ -25,7 +25,7 @@ public class LinearProbingHashMap implements ExerciseHashMap {
 
         boolean hasInsertedNew = false;
 
-        while (!mainArray.hasWrapped()) {
+        while (mainArray.hasNext()) {
             var entry = mainArray.nextEntry();
 
             if (entry == null) {
@@ -35,6 +35,10 @@ public class LinearProbingHashMap implements ExerciseHashMap {
 
             if (entry.key == key) {
                 break;
+            }
+
+            if (!mainArray.hasNext()) {
+                throw new IllegalStateException("No free slots available.");
             }
         }
 
@@ -51,7 +55,7 @@ public class LinearProbingHashMap implements ExerciseHashMap {
 
         oldArray.startReadingAt(0);
 
-        while (!oldArray.hasWrapped()) {
+        while (oldArray.hasNext()) {
             var entry = oldArray.nextEntry();
             if (entry == null) {
                 continue;
@@ -67,7 +71,7 @@ public class LinearProbingHashMap implements ExerciseHashMap {
 
         mainArray.startReadingAt(index);
 
-        while (!mainArray.hasWrapped()) {
+        while (mainArray.hasNext()) {
             var entry = mainArray.nextEntry();
             if (entry == null) {
                 return OptionalInt.empty();
@@ -92,7 +96,7 @@ public class LinearProbingHashMap implements ExerciseHashMap {
 
         mainArray.startReadingAt(index);
 
-        while (!mainArray.hasWrapped()) {
+        while (mainArray.hasNext()) {
             var entry = mainArray.nextEntry();
             if (entry == null) {
                 return false;
@@ -100,6 +104,10 @@ public class LinearProbingHashMap implements ExerciseHashMap {
 
             if (entry.key == key) {
                 break;
+            }
+
+            if (!mainArray.hasNext()) {
+                return false;
             }
         }
 
@@ -110,7 +118,7 @@ public class LinearProbingHashMap implements ExerciseHashMap {
 
         int countEntriesToDelete = 0;
 
-        while (!mainArray.hasWrapped()) {
+        while (mainArray.hasNext()) {
             var entry = mainArray.nextEntry();
             if (entry == null) {
                 break;
@@ -124,7 +132,7 @@ public class LinearProbingHashMap implements ExerciseHashMap {
 
         mainArray.startReadingAt(deletedAtIndex + 1);
 
-        while (!mainArray.hasWrapped()) {
+        while (mainArray.hasNext()) {
             var entry = mainArray.nextEntry();
             if (entry == null) {
                 break;
@@ -179,8 +187,8 @@ public class LinearProbingHashMap implements ExerciseHashMap {
             capacity = initialCapacity;
         }
 
-        public boolean hasWrapped() {
-            return counted > capacity;
+        public boolean hasNext() {
+            return counted < capacity;
         }
 
         public void startReadingAt(int index) {
@@ -193,8 +201,8 @@ public class LinearProbingHashMap implements ExerciseHashMap {
         }
 
         public Entry nextEntry() {
-            if (hasWrapped()) {
-                throw new IllegalStateException("The implementation has probably entered an infinite loop.");
+            if (!hasNext()) {
+                throw new IllegalStateException("There is no next entry");
             }
 
             var nextToRead = (lastReadCursor + 1) % entries.length;
