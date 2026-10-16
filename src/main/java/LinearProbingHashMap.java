@@ -2,65 +2,73 @@ import java.util.OptionalInt;
 
 public class LinearProbingHashMap implements ExerciseHashMap {
 
-    Entry[] mainArray = new Entry[100];
+    CircularArray mainArray = new CircularArray(100);
     int size = 0;
 
     double targetLoadFactor = 0.5;
 
-
     @Override
     public void put(int key, int value) {
+        if (insert(key, value)) {
+            size++;
+        }
+
+        if (size / (double) mainArray.capacity > targetLoadFactor) {
+            resize();
+        }
+    }
+
+    private boolean insert(int key, int value) {
         int index = hashFunction(key);
 
-        while (index < mainArray.length) {
-            var entry = mainArray[index];
+        mainArray.startReadingAt(index);
+
+        boolean hasInsertedNew = false;
+
+        while (!mainArray.hasWrapped()) {
+            var entry = mainArray.nextEntry();
+
             if (entry == null) {
-                size++;
+                hasInsertedNew = true;
                 break;
             }
 
             if (entry.key == key) {
                 break;
             }
-
-            index++;
         }
 
-        if (index == mainArray.length) {
-            throw new IllegalStateException("No free slots were found");
-        }
+        var newEntry = new Entry(key, value);
+        mainArray.set(newEntry);
 
-        var entry = new Entry(key, value);
-        mainArray[index] = entry;
-
-        if (size / (double) mainArray.length > targetLoadFactor) {
-            resize();
-        }
+        return hasInsertedNew;
     }
 
     private void resize() {
-        var oldArray = mainArray.clone();
-        int initialSize = size;
+        var oldArray = mainArray;
 
-        mainArray = new Entry[oldArray.length * 2];
+        mainArray = new CircularArray(oldArray.capacity * 2);
 
-        for (var entry : oldArray) {
+        oldArray.startReadingAt(0);
+
+        while (!oldArray.hasWrapped()) {
+            var entry = oldArray.nextEntry();
             if (entry == null) {
                 continue;
             }
 
-            put(entry.key, entry.value);
+            insert(entry.key, entry.value);
         }
-
-        size = initialSize;
     }
 
     @Override
     public OptionalInt get(int key) {
         int index = hashFunction(key);
 
-        while (index < mainArray.length) {
-            var entry = mainArray[index];
+        mainArray.startReadingAt(index);
+
+        while (!mainArray.hasWrapped()) {
+            var entry = mainArray.nextEntry();
             if (entry == null) {
                 return OptionalInt.empty();
             }
@@ -68,8 +76,6 @@ public class LinearProbingHashMap implements ExerciseHashMap {
             if (entry.key == key) {
                 return OptionalInt.of(entry.value);
             }
-
-            index++;
         }
 
         return OptionalInt.empty();
@@ -84,8 +90,10 @@ public class LinearProbingHashMap implements ExerciseHashMap {
     public boolean remove(int key) {
         int index = hashFunction(key);
 
-        while (index < mainArray.length) {
-            var entry = mainArray[index];
+        mainArray.startReadingAt(index);
+
+        while (!mainArray.hasWrapped()) {
+            var entry = mainArray.nextEntry();
             if (entry == null) {
                 return false;
             }
@@ -93,49 +101,48 @@ public class LinearProbingHashMap implements ExerciseHashMap {
             if (entry.key == key) {
                 break;
             }
-
-            index++;
         }
 
-        mainArray[index] = null;
+        mainArray.set(null);
         size--;
 
-        int nextEmptyIndex = index + 1;
+        int deletedAtIndex = mainArray.getLastReadCursor();
 
-        while (index < mainArray.length) {
-            if (mainArray[nextEmptyIndex] == null) {
+        int countEntriesToDelete = 0;
+
+        while (!mainArray.hasWrapped()) {
+            var entry = mainArray.nextEntry();
+            if (entry == null) {
                 break;
             }
 
-            nextEmptyIndex++;
+            countEntriesToDelete++;
         }
 
-        var tempArray = new Entry[nextEmptyIndex - index];
+        var tempArray = new Entry[countEntriesToDelete];
         int tempArrayIndex = 0;
 
-        nextEmptyIndex = index + 1;
-        while (index < mainArray.length) {
-            if (mainArray[nextEmptyIndex] == null) {
+        mainArray.startReadingAt(deletedAtIndex + 1);
+
+        while (!mainArray.hasWrapped()) {
+            var entry = mainArray.nextEntry();
+            if (entry == null) {
                 break;
             }
 
-            tempArray[tempArrayIndex] = mainArray[nextEmptyIndex];
-            mainArray[nextEmptyIndex] = null;
-            nextEmptyIndex++;
+            tempArray[tempArrayIndex] = entry;
+            mainArray.set(null);
+
             tempArrayIndex++;
         }
-
-        int originalSize = size;
 
         for (var entry : tempArray) {
             if (entry == null) {
                 continue;
             }
 
-            put(entry.key, entry.value);
+            insert(entry.key, entry.value);
         }
-
-        size = originalSize;
 
         return true;
     }
@@ -146,7 +153,7 @@ public class LinearProbingHashMap implements ExerciseHashMap {
     }
 
     private int hashFunction(int key) {
-        return Math.abs(key % mainArray.length);
+        return Math.abs(key % mainArray.capacity);
     }
 
     private class Entry {
@@ -156,6 +163,52 @@ public class LinearProbingHashMap implements ExerciseHashMap {
         public Entry(int key, int value) {
             this.key = key;
             this.value = value;
+        }
+    }
+
+    private class CircularArray {
+        private Entry[] entries;
+
+        private int lastReadCursor;
+        private int capacity;
+
+        private int counted;
+
+        public CircularArray(int initialCapacity) {
+            entries = new Entry[initialCapacity];
+            capacity = initialCapacity;
+        }
+
+        public boolean hasWrapped() {
+            return counted > capacity;
+        }
+
+        public void startReadingAt(int index) {
+            lastReadCursor = (index - 1) % entries.length;
+            counted = 0;
+        }
+
+        public int getLastReadCursor() {
+            return lastReadCursor;
+        }
+
+        public Entry nextEntry() {
+            if (hasWrapped()) {
+                throw new IllegalStateException("The implementation has probably entered an infinite loop.");
+            }
+
+            var nextToRead = (lastReadCursor + 1) % entries.length;
+
+            var entry = entries[nextToRead];
+
+            lastReadCursor = nextToRead;
+            counted++;
+
+            return entry;
+        }
+
+        public void set(Entry entry) {
+            entries[lastReadCursor] = entry;
         }
     }
 }
